@@ -1,0 +1,602 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sample SAM Template for aws-bedrock-data-automation-samples
+
+Parameters:
+  UniqueKey:
+    Type: String
+    Description: A unique key for this data source
+    MinLength: "5"
+    Default: "asdfg" 
+  AOSSCollectionName:
+    Default: "benefit-claim-oss-collection"
+    Type: String
+    Description: Name of the Amazon OpenSearch Service Serverless (AOSS) collection.
+  AOSSIndexName:
+    Default: "benefit-claim-oss-index"
+    Type: String
+    Description: Name of the Amazon OpenSearch Service Serverless (AOSS) collection Index.     
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+
+Resources:
+########################################################## Amazon Bedrock Knowledgebase setup ############################################
+  BDADataAccessPolicy:
+    Type: 'AWS::OpenSearchServerless::AccessPolicy'
+    Properties:
+      Name: "benefit-claim-oss-data-policy"
+      Type: data
+      Policy: !Sub >-
+        [
+          {
+            "Description": "Access for cfn user",
+            "Rules": [
+              {
+                "ResourceType": "index",
+                "Resource": [
+                  "index/*/*"
+                ],
+                "Permission": [
+                  "aoss:*"
+                ]
+              },
+              {
+                "ResourceType": "collection",
+                "Resource": [
+                  "collection/${AOSSCollectionName}"
+                ],
+                "Permission": [
+                  "aoss:*"
+                ]
+              }
+            ],
+            "Principal": [
+              "${BDABedrockKnowledgeBaseRole.Arn}",
+              "arn:aws:iam::${AWS::AccountId}:root"
+            ]
+          }
+        ]
+
+  NetworkPolicy:
+      Type: 'AWS::OpenSearchServerless::SecurityPolicy'
+      Properties:
+        Name: "benefit-claim-oss-network-policy"
+        Type: network
+        Policy: !Sub >-
+          [
+            {
+              "Rules": [
+                {
+                  "ResourceType": "collection",
+                  "Resource": [
+                    "collection/${AOSSCollectionName}"
+                  ]
+                },
+                {
+                  "ResourceType": "dashboard",
+                  "Resource": [
+                    "collection/${AOSSCollectionName}"
+                  ]
+                }
+              ],
+              "AllowFromPublic": true
+            }
+          ]
+
+  BDAOSSEncryptionPolicy:
+    Type: 'AWS::OpenSearchServerless::SecurityPolicy'
+    Properties:
+      Name: "benefit-claim-oss-encrpt-policy"
+      Type: 'encryption'
+      Policy: !Sub >-
+        {
+          "Rules": [
+            {
+              "ResourceType": "collection",
+              "Resource": ["collection/${AOSSCollectionName}"]
+            }
+          ],
+          "AWSOwnedKey": true
+        }
+
+  BDAOSSCollection:
+    Type: 'AWS::OpenSearchServerless::Collection'
+    DependsOn: [BDAOSSEncryptionPolicy, NetworkPolicy, BDADataAccessPolicy]
+    Properties:
+      Name: !Ref AOSSCollectionName
+      Type: "VECTORSEARCH"
+
+  BDAOSSIndex:
+    Type: 'AWS::OpenSearchServerless::Index'
+    DependsOn: BDAOSSCollection
+    Properties:
+      CollectionEndpoint: !GetAtt BDAOSSCollection.CollectionEndpoint
+      IndexName: !Ref AOSSIndexName
+      Settings:
+        Index:
+          Knn: true
+      Mappings: 
+        Properties:
+          vector:
+            Type: "knn_vector"
+            Dimension: 1024
+            Method:
+              Name: "hnsw"
+              Engine: "faiss"
+              Parameters:
+                M: 16
+                EfConstruction: 512
+          text:
+            Type: "text"
+          metadata:
+            Type: "text"
+
+  BDAKBBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub "benefit-claim-kb-bucket-${UniqueKey}"
+
+  BDABedrockKnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "benefit-claim-bedrock-kb-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                "aws:SourceAccount": !Sub "${AWS::AccountId}"
+              ArnLike:
+                "AWS:SourceArn": !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+      Path: /
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub arn:aws:s3:::benefit-claim-kb-bucket-${UniqueKey}
+                  - !Sub arn:aws:s3:::benefit-claim-kb-bucket-${UniqueKey}/*
+        - PolicyName: AOSSAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource: !Sub arn:aws:aoss:${AWS::Region}:${AWS::AccountId}:collection/*
+        - PolicyName: BedrockAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:ListFoundationModels
+                  - bedrock:ListCustomModels
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/*
+
+  DelayFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt DelayFunctionRole.Arn
+      Timeout: 360
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import time
+          
+          def handler(event, context):
+              # Sleep for 5 minutes
+              time.sleep(300)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              return "Success"
+
+  DelayFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  DelayResource:
+    Type: Custom::Delay
+    Properties:
+      ServiceToken: !GetAtt DelayFunction.Arn
+      # Add a random value to force update when redeploying
+      Random: !Ref UniqueKey
+
+  BDABedrockKnowledgeBase:
+    Type: 'AWS::Bedrock::KnowledgeBase'
+    DependsOn: [BDAOSSIndex, DelayResource]
+    Properties:
+      Name: !Sub "benefit-claim-bedrock-kb"
+      RoleArn: !GetAtt BDABedrockKnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration: 
+        Type: "VECTOR"
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0"
+          EmbeddingModelConfiguration:
+            BedrockEmbeddingModelConfiguration:
+              Dimensions: 1024
+      StorageConfiguration:
+        Type: "OPENSEARCH_SERVERLESS"
+        OpensearchServerlessConfiguration:
+          CollectionArn: !GetAtt BDAOSSCollection.Arn
+          VectorIndexName: "benefit-claim-oss-index"
+          FieldMapping: 
+            MetadataField: "metadata"
+            VectorField: "vector"
+            TextField: "text"
+
+  BDAKBDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      KnowledgeBaseId: !Ref BDABedrockKnowledgeBase
+      Name: "benefit-claim-bedrock-kb-ds"
+      DataSourceConfiguration:
+        Type: "S3"
+        S3Configuration:
+          BucketArn: !GetAtt BDAKBBucket.Arn
+
+  ########################################################## Amazon Bedrock Knowledgebase setup ############################################
+
+  # Ingestion Bucket
+  IngestionBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub "benefit-claim-ingestion-bucket-${UniqueKey}"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:Put'
+            Function: !GetAtt ExtractionLambda.Arn
+    
+  # Extraction Lambda
+  ExtractionLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      Runtime: python3.13
+      Handler: app.lambda_handler
+      FunctionName: !Sub "benefit-claim-extraction-function-${UniqueKey}"
+      CodeUri: ./extraction/
+      Role: !GetAtt ExtractionLambdaRole.Arn
+      Environment:
+        Variables:
+          EXTRACTION_BUCKET_NAME: !Ref ExtractionBucket
+          BDA_PROJECT_ARN: !Ref BenefitClaimsBDAProject
+          BDA_TABLE_NAME: !Ref BenefitClaimsProcessingTable
+          
+  ExtractionLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "benefit-claim-extraction-function-role-${UniqueKey}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  ExtractionLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ExtractionLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::benefit-claim-ingestion-bucket-${UniqueKey}
+
+  ExtractionLambdaBedrockAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-extraction-async-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Sid: BDAInvoke
+            Action: 
+              - bedrock:InvokeDataAutomationAsync
+            Resource: 
+              - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-project/public-default
+              - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-project/*
+              - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:blueprint/*
+              - !Sub arn:aws:bedrock:us-east-1:${AWS::AccountId}:data-automation-profile/us.data-automation-v1
+              - !Sub arn:aws:bedrock:us-east-2:${AWS::AccountId}:data-automation-profile/us.data-automation-v1
+              - !Sub arn:aws:bedrock:us-west-1:${AWS::AccountId}:data-automation-profile/us.data-automation-v1
+              - !Sub arn:aws:bedrock:us-west-2:${AWS::AccountId}:data-automation-profile/us.data-automation-v1
+              - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-profile/us.data-automation-v1
+      Roles: 
+        - !Ref ExtractionLambdaRole
+
+  ExtractionLambdaS3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-extraction-s3-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+            - s3:GetObject
+            - s3:ListBucket
+            Resource: !Sub arn:aws:s3:::benefit-claim-ingestion-bucket-${UniqueKey}/*
+          - Effect: Allow
+            Action: 
+            - s3:ListBucket
+            - s3:PutObject
+            Resource: !Sub arn:aws:s3:::benefit-claim-extraction-bucket-${UniqueKey}/*    
+      Roles: 
+        - !Ref ExtractionLambdaRole
+
+  # Extraction Bucket
+  ExtractionBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub "benefit-claim-extraction-bucket-${UniqueKey}"
+  
+  ValidationLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      Runtime: python3.13
+      Handler: app.lambda_handler
+      FunctionName: !Sub "benefit-claim-validation-function-${UniqueKey}"
+      CodeUri: ./validation/
+      Role: !GetAtt ValidationLambdaRole.Arn
+      Environment:
+        Variables:
+          BDA_TABLE_NAME: !Ref BenefitClaimsProcessingTable
+          KNOWLEDGE_BASE_ID: !Ref BDABedrockKnowledgeBase
+          KNOWLEDGE_BASE_MODEL_ID: 'amazon.nova-lite-v1:0'
+      Events:
+        BDACustomOutputRule:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              detail-type:
+                - Bedrock Data Automation Job Succeeded
+              source:
+                - aws.bedrock     
+
+  ValidationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "benefit-claim-validation-function-role-${UniqueKey}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  ValidationLambdaS3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-validation-s3-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+            - s3:GetObject
+            - s3:ListBucket
+            Resource: !Sub arn:aws:s3:::benefit-claim-extraction-bucket-${UniqueKey}/*
+      Roles: 
+        - !Ref ValidationLambdaRole
+
+  ValidationLambdaEventBridgeAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-validation-events-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+            - events:ListEventBuses
+            - events:ListRules
+            - events:DescribeEventBus
+            - events:DescribeRule
+            - events:PutEvents
+            Resource: 
+              - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+              - !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/benefit-claims-*
+      Roles: 
+        - !Ref ValidationLambdaRole
+
+  # create a Bedrock access policy for ValidationLambdaRole
+  ValidationLambdaBedrockAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-validation-bedrock-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - bedrock:InvokeModel
+              - bedrock:InvokeModelWithResponseStream
+              - bedrock:RetrieveAndGenerate
+              - bedrock:Retrieve
+              - bedrock:ListFoundationModels
+            Resource: 
+              - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0"
+              - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/amazon.nova-lite-v1:0"
+              - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+      Roles: 
+        - !Ref ValidationLambdaRole
+
+
+  BenefitClaimLambdaDynamoAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-dynamo-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - dynamodb:PutItem
+              - dynamodb:DeleteItem
+              - dynamodb:UpdateItem
+              - dynamodb:DescribeTable
+              - dynamodb:GetItem
+              - dynamodb:Scan
+              - dynamodb:Query
+            Resource: !GetAtt "BenefitClaimsProcessingTable.Arn"   
+      Roles: 
+        - !Ref ExtractionLambdaRole
+        - !Ref ValidationLambdaRole
+
+  IntegrationLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      Runtime: python3.13
+      Handler: app.lambda_handler
+      FunctionName: !Sub "benefit-claim-integration-function-${UniqueKey}"
+      CodeUri: ./integration/
+      Role: !GetAtt IntegrationLambdaRole.Arn
+      Environment:
+        Variables:
+          NOTIFICATION_TOPIC_ARN: !Ref NotificationTopic
+      Events:
+        BenefitClaimValidationCompletionRule:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              detail-type:
+                - Benefit Claim Validation Completed
+              source:
+                - benefit-claim-validation-function
+
+  IntegrationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "benefit-claim-integration-function-role-${UniqueKey}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  BenefitClaimsBDAProject:
+    Type: AWS::Bedrock::DataAutomationProject
+    Properties:
+      ProjectName: !Sub "benefit-claim-project-${UniqueKey}"
+      ProjectStage: LIVE
+      CustomOutputConfiguration:
+        Blueprints:
+          - BlueprintArn: !Sub arn:aws:bedrock:${AWS::Region}:aws:blueprint/bedrock-data-automation-public-us-bank-check
+          - BlueprintArn: !Sub arn:aws:bedrock:${AWS::Region}:aws:blueprint/bedrock-data-automation-public-receipt
+      StandardOutputConfiguration:
+        Document:
+          Extraction:
+            BoundingBox:
+              State: ENABLED
+            Granularity:
+              Types:
+                - DOCUMENT
+                - PAGE
+                - LINE
+        Image:
+          Extraction:
+            BoundingBox:
+              State: ENABLED
+            Category:
+              State: ENABLED
+              Types:  
+                - TEXT_DETECTION
+
+  BenefitClaimsProcessingTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: invocationId
+          AttributeType: S
+        - AttributeName: fileName
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: invocationId
+          KeyType: HASH
+        - AttributeName: fileName
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  
+  # SNS Topic for notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "benefit-claim-notification-topic-${UniqueKey}"
+
+  # SNS Topic Subscription
+  NotificationTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref NotificationTopic
+      Protocol: email
+      Endpoint: "samtamil@amazon.com"
+
+  # SNS publish permissions for IntegrationLambda
+  IntegrationLambdaSNSPublishPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "benefit-claim-integration-sns-policy-${UniqueKey}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 
+              - sns:Publish
+            Resource: !Ref NotificationTopic
+      Roles: 
+        - !Ref IntegrationLambdaRole
+
+
+  # IAM Role to allow EventBridge to invoke the Lambda function
+  EventBridgeInvokeLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref ValidationLambda
+      Action: 'lambda:InvokeFunction'
+      Principal: 'events.amazonaws.com'
+      SourceArn: !Sub "arn:aws:events:::rule/benefit-claim-custom-output-success-rule-${UniqueKey}"

@@ -1,0 +1,10 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "benefit-claims"
+resolve_s3 = true
+s3_prefix = "benefit-claims"
+region = "us-east-1"
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = "UniqueKey=\"asdfg\" AOSSCollectionName=\"benefit-claim-oss-collection\" AOSSIndexName=\"benefit-claim-oss-index\""
+image_repositories = []

@@ -1,0 +1,12 @@
+ {
+        "query": "Should claim for this receipt be approved or not?",
+        "max_results": 3,  
+        "similarity_threshold": 0.7,  
+        "benefitClaimsReceipt": {
+            "PAYMENTDETAILS":{"TOTAL": 202.97, "SUBTOTAL": 202.97, "TAX": [0], "AMOUNTPAID": 202.97},
+            "VENDORDETAILS": {"VENDORADDRESS": "670 51 10736 384601 9702", "VENDORPHONE": "", "VENDORNAME": "LOCAL DRUGS"},
+            "RECEIPT_ID": "", "expire": "True", "RECEIPT_DATE": "07/22/2020",
+            "LINEITEMS": [{"PRODUCT": "Pain Killer", "QTY": 1, "AMT": 2.99}, {"PRODUCT": "Corona Medication", "QTY": 2, "AMT": 199.98}]
+
+        }
+    }
