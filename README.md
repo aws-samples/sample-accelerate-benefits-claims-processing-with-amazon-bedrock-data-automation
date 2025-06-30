@@ -1,4 +1,4 @@
-# AWS Bedrock Data Automation - Benefits Claim Processing
+# Amazon Bedrock Data Automation - Benefits Claim Processing
 
 This project demonstrates an automated benefits claim processing system using Amazon Bedrock Data Automation, Amazon Bedrock, Amazon Bedrock Knowledge Base, AWS Lambda, and Amazon DynamoDB  services. The system can process various documents like bank checks and medical receipts, extracting relevant information, validating the benefit claim by applying standard operating procedures and business rules automatically. 
 
@@ -110,7 +110,7 @@ sam delete --stack-name <stack-name>
 ```
 
 This will remove all resources created by the template including:
-- S3 buckets (ingestion, extraction and knowledgebase bucket)
+- S3 buckets (ingestion, extraction and knowledge base bucket)
 - Lambda functions (extraction, validation, integration)
 - IAM roles and policies
 - DynamoDB table
@@ -121,7 +121,7 @@ This will remove all resources created by the template including:
 
 ## Sample Documents
 
-The project includes sample check and medical receipts for testing. As this is demo code we recommend using these documents for the testing. 
+The project includes sample check and medical receipts for testing. You can use these for getting started but we recommend using your own documents for the testing.  
 
 - Check Samples:
   - sample.png
@@ -134,7 +134,7 @@ The project includes sample check and medical receipts for testing. As this is d
 
 ## Security
 
-This code is art possible using Bedrock Data Automation services, for production workloads we recommend using customer-managed KMS keys. This code relies on the defalut encripytion. Refer this link for creating the KMS keys, https://docs.aws.amazon.com/kms/latest/developerguide/create-keys.html
+This sample code is to show art of the possible and relies on the default encryption. For production workloads we recommend using customer-managed KMS keys. Refer this link for creating the KMS keys, https://docs.aws.amazon.com/kms/latest/developerguide/create-keys.html
 
 The project implements secure IAM roles and policies:
 - Private S3 buckets with appropriate access controls
