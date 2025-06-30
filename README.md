@@ -1,4 +1,4 @@
-# Amazon Bedrock Data Automation - Benefits Claim Processing
+# AWS Bedrock Data Automation - Benefits Claim Processing
 
 This project demonstrates an automated benefits claim processing system using Amazon Bedrock Data Automation, Amazon Bedrock, Amazon Bedrock Knowledge Base, AWS Lambda, and Amazon DynamoDB  services. The system can process various documents like bank checks and medical receipts, extracting relevant information, validating the benefit claim by applying standard operating procedures and business rules automatically. 
 
@@ -65,18 +65,28 @@ The project uses two custom blueprints for document processing:
 
 ## Deployment Instructions
 
-1. Build the application:
+1. Update the Email for the SNS notification in the template.yaml file (L577).
+
+2. Build the application:
 ```bash
 cd infrastructure
 sam build
 ```
-
-2. Deploy the application:
+3. Deploy the application: <br>
+Make sure to provide unique value for the parameter UniqueKey. Otherwise the deployment will fail.
 ```bash
 sam deploy --guided --capabilities CAPABILITY_NAMED_IAM
 ```
 
-3. Run the frontend application
+4. Add Access to Amazon Bedrock Models. <br>
+Please follow the link to add access to the foundation models in Amazon Bedrock(Titan Text Embeddings V2 and Nova Lite). <br>
+https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html
+
+5. To sync the SOP documents with Amazon Bedrock Knowledge Base
+   - Upload all SOP documents from the /assets/others folders to the specified S3 bucket named 'benefit-claim-kb-bucket-${UniqueKey}'
+   - After the upload is complete, manually trigger the sync job by, locating the datasource 'benefit-claim-bedrock-kb-ds' within the Amazon Bedrock Knowledge Base  'benefit-claim-bedrock-kb'
+
+6. Run the frontend application
 ```bash
 cd frontend
 sam streamlit run app.py
@@ -100,7 +110,7 @@ sam delete --stack-name <stack-name>
 ```
 
 This will remove all resources created by the template including:
-- S3 buckets (ingestion, extraction and knowledge base bucket)
+- S3 buckets (ingestion, extraction and knowledgebase bucket)
 - Lambda functions (extraction, validation, integration)
 - IAM roles and policies
 - DynamoDB table
@@ -111,7 +121,7 @@ This will remove all resources created by the template including:
 
 ## Sample Documents
 
-The project includes sample check and medical receipts for testing. You can use these for getting started but we recommend using your own documents for the testing. 
+The project includes sample check and medical receipts for testing. As this is demo code we recommend using these documents for the testing. 
 
 - Check Samples:
   - sample.png
@@ -124,7 +134,7 @@ The project includes sample check and medical receipts for testing. You can use 
 
 ## Security
 
-This sample code is to show art of the possible and relies on the default encryption. For production workloads we recommend using customer-managed KMS keys. Refer this link for creating the KMS keys, https://docs.aws.amazon.com/kms/latest/developerguide/create-keys.html
+This code is art possible using Bedrock Data Automation services, for production workloads we recommend using customer-managed KMS keys. This code relies on the defalut encripytion. Refer this link for creating the KMS keys, https://docs.aws.amazon.com/kms/latest/developerguide/create-keys.html
 
 The project implements secure IAM roles and policies:
 - Private S3 buckets with appropriate access controls
