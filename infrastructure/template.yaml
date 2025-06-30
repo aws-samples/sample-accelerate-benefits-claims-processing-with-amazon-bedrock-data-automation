@@ -7,7 +7,7 @@ Parameters:
     Type: String
     Description: A unique key for this data source
     MinLength: "5"
-    Default: "asdfg" 
+    Default: "xxx" 
   AOSSCollectionName:
     Default: "benefit-claim-oss-collection"
     Type: String
@@ -574,7 +574,7 @@ Resources:
     Properties:
       TopicArn: !Ref NotificationTopic
       Protocol: email
-      Endpoint: "samtamil@amazon.com"
+      Endpoint: "xxxx"
 
   # SNS publish permissions for IntegrationLambda
   IntegrationLambdaSNSPublishPolicy:

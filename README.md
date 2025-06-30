@@ -65,18 +65,28 @@ The project uses two custom blueprints for document processing:
 
 ## Deployment Instructions
 
-1. Build the application:
+1. Update the Email for the SNS notification in the template.yaml file (L577).
+
+2. Build the application:
 ```bash
 cd infrastructure
 sam build
 ```
-
-2. Deploy the application:
+3. Deploy the application: <br>
+Make sure to provide unique value for the parameter UniqueKey. Otherwise the deployment will fail.
 ```bash
 sam deploy --guided --capabilities CAPABILITY_NAMED_IAM
 ```
 
-3. Run the frontend application
+4. Add Access to Amazon Bedrock Models. <br>
+Please follow the link to add access to the foundation models in Amazon Bedrock(Titan Text Embeddings V2 and Nova Lite). <br>
+https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html
+
+5. To sync the SOP documents with Amazon Bedrock Knowledge Base
+   - Upload all SOP documents from the /assets/others folders to the specified S3 bucket named 'benefit-claim-kb-bucket-${UniqueKey}'
+   - After the upload is complete, manually trigger the sync job by, locating the datasource 'benefit-claim-bedrock-kb-ds' within the Amazon Bedrock Knowledge Base  'benefit-claim-bedrock-kb'
+
+6. Run the frontend application
 ```bash
 cd frontend
 sam streamlit run app.py
@@ -111,7 +121,7 @@ This will remove all resources created by the template including:
 
 ## Sample Documents
 
-The project includes sample check and medical receipts for testing. You can use these for getting started but we recommend using your own documents for the testing. 
+The project includes sample check and medical receipts for testing. You can use these for getting started but we recommend using your own documents for the testing.  
 
 - Check Samples:
   - sample.png
