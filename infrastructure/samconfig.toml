@@ -1,10 +1,10 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "benefit-claims"
+stack_name = "teststack"
 resolve_s3 = true
-s3_prefix = "benefit-claims"
+s3_prefix = "teststack"
 region = "us-east-1"
 capabilities = "CAPABILITY_NAMED_IAM"
-parameter_overrides = "UniqueKey=\"xxx\" AOSSCollectionName=\"benefit-claim-oss-collection\" AOSSIndexName=\"benefit-claim-oss-index\""
+parameter_overrides = "UniqueKey=\"sdf123\" AOSSCollectionName=\"claim-oss-col\" AOSSIndexName=\"claim-oss-idx\" EmailIdForNotification=\"xxxxx@gmail.com\""
 image_repositories = []

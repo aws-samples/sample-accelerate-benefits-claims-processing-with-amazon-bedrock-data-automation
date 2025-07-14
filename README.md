@@ -23,10 +23,10 @@ The project uses two custom blueprints for document processing:
 ### Document Classification Examples
 
 1. US Bank Check Classification:
-![US Bank Check Classification](assets/images/Figure 4-Document classification by BDA blueprint - US Bank Check.png)
+![US Bank Check Classification](assets/images/Figure%204-Document%20classification%20by%20BDA%20blueprint%20-%20US%20Bank%20Check.png)
 
 2. Receipt Classification:
-![Receipt Classification](assets/images/Figure 5-Document classification by BDA blueprint - Receipt.png)
+![Receipt Classification](assets/images/Figure%205-Document%20classification%20by%20BDA%20blueprint%20-%20Receipt.png)
 
 ## Project Structure
 
@@ -89,7 +89,7 @@ https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html
 6. Run the frontend application
 ```bash
 cd frontend
-sam streamlit run app.py
+streamlit run app.py
 ```
 
 ## Clean up
