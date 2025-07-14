@@ -227,14 +227,14 @@ def validateBenefitClaim(claimReceiptData, blue_print_name):
         validation_response = ""
         if "output" in response and "text" in response["output"]:
             validation_response = response["output"]["text"]
-            print("Generated Text:", validation_response)
+            logger.info(f"Generated Text:, {validation_response}")
 
             if "retrievedReferences" in response:
-                print("Retrieved References:")
+                logger.info("Retrieved References:")
                 for ref in response["retrievedReferences"]:
-                    print(f"  - Source: {ref['content']['text']}")
+                    logger.info(f"  - Source: {ref['content']['text']}")
         else:
-            print("No output or text found in the response.")
+            logger.info("No output or text found in the response.")
         return validation_response
     except Exception as e:
         logger.error(f"Error:, {e}")

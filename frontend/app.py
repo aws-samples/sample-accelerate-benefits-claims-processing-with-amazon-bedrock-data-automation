@@ -4,7 +4,7 @@ import boto3
 st.set_page_config(page_title="benefit-claims")  # HTML title
 st.title("benefit-claims")  # page title
 
-bucket_name = "benefit-claim-ingestion-bucket-asdfg"
+bucket_name = "benefit-claim-ingestion-bucket-sdf123"
 s3 = boto3.client("s3")
 
 uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png"],label_visibility="collapsed")
