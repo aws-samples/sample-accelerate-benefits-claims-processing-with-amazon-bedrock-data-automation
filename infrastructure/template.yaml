@@ -6,8 +6,7 @@ Parameters:
   UniqueKey:
     Type: String
     Description: A unique key for this data source
-    MinLength: "5"
-    Default: "xxx" 
+    Default: "sdf123" 
   AOSSCollectionName:
     Default: "benefit-claim-oss-collection"
     Type: String
@@ -15,7 +14,10 @@ Parameters:
   AOSSIndexName:
     Default: "benefit-claim-oss-index"
     Type: String
-    Description: Name of the Amazon OpenSearch Service Serverless (AOSS) collection Index.     
+    Description: Name of the Amazon OpenSearch Service Serverless (AOSS) collection Index.   
+  EmailIdForNotification:
+    Type: String
+    Description: Email ID for notification  
 
 Globals:
   Function:
@@ -248,7 +250,7 @@ Resources:
         Type: "OPENSEARCH_SERVERLESS"
         OpensearchServerlessConfiguration:
           CollectionArn: !GetAtt BDAOSSCollection.Arn
-          VectorIndexName: "benefit-claim-oss-index"
+          VectorIndexName: !Ref AOSSIndexName
           FieldMapping: 
             MetadataField: "metadata"
             VectorField: "vector"
@@ -514,6 +516,90 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  
+  # Blueprint resource for pharmacy receipts
+  PharmacyReceiptBlueprint:
+    Type: AWS::Bedrock::Blueprint
+    Properties:
+      BlueprintName: "benefit-claims-pharmacy-receipt-blueprint"
+      Type: "DOCUMENT"
+      Schema: {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Custom blueprint for pharmacy receipts",
+        "class": "Pharmacy Receipt",
+        "type": "object",
+        "definitions": {
+          "LineItem": {
+            "type": "object",
+            "properties": {
+              "Product": {
+                  "type": "string",
+                  "inferenceType": "explicit",
+                  "instruction": "Name of the product. It can contain either a product code or product description like Flu Medicine"
+                },
+                "Quantity": {
+                  "type": "number",
+                  "inferenceType": "explicit",
+                  "instruction": "Quantity of the product purchased"
+                },
+                "Amount": {
+                  "type": "number",
+                  "inferenceType": "explicit",
+                  "instruction": "Amount for this line item"
+                }
+            }
+          }
+        },
+        "properties": {
+          "VendorName": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "Name of the pharmacy or medical provider"
+          },
+          "VendorAddress": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "Address of the pharmacy or medical provider"
+          },
+          "VendorPhone": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "Phone number of the pharmacy or medical provider"
+          },
+          "Subtotal": {
+            "type": "number",
+            "inferenceType": "explicit",
+            "instruction": "Subtotal amount before tax"
+          },
+          "Total": {
+            "type": "number",
+            "inferenceType": "explicit",
+            "instruction": "Total amount including tax"
+          },
+          "AmountPaid": {
+            "type": "number",
+            "inferenceType": "explicit",
+            "instruction": "Amount paid by the customer"
+          },
+          "ReceiptId": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "Unique identifier for the receipt"
+          },
+          "ReceiptDate": {
+            "type": "string",
+            "inferenceType": "explicit",
+            "instruction": "receipt was generated in MM/DD/YYYY format"
+          },
+          "LineItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/LineItem"
+            },
+            "instruction": "List of line items purchased"
+          }
+        }
+      }
 
   BenefitClaimsBDAProject:
     Type: AWS::Bedrock::DataAutomationProject
@@ -523,7 +609,7 @@ Resources:
       CustomOutputConfiguration:
         Blueprints:
           - BlueprintArn: !Sub arn:aws:bedrock:${AWS::Region}:aws:blueprint/bedrock-data-automation-public-us-bank-check
-          - BlueprintArn: !Sub arn:aws:bedrock:${AWS::Region}:aws:blueprint/bedrock-data-automation-public-receipt
+          - BlueprintArn: !Ref  PharmacyReceiptBlueprint
       StandardOutputConfiguration:
         Document:
           Extraction:
@@ -574,7 +660,7 @@ Resources:
     Properties:
       TopicArn: !Ref NotificationTopic
       Protocol: email
-      Endpoint: "xxxx"
+      Endpoint: !Ref EmailIdForNotification
 
   # SNS publish permissions for IntegrationLambda
   IntegrationLambdaSNSPublishPolicy:
